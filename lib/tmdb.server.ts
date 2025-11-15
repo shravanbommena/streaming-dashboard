@@ -1,8 +1,8 @@
-// lib/tmdb.ts
+// lib/tmdb.server.ts
 import { TMDBListResponse, Movie } from "../types/movie";
 
 const API_KEY = process.env.TMDB_API_KEY;
-const BEARER = process.env.TMDB_BEARER_TOKEN; // v4 token, optional
+const BEARER = process.env.TMDB_BEARER_TOKEN;
 
 if (!API_KEY && !BEARER) {
   throw new Error(
@@ -12,10 +12,13 @@ if (!API_KEY && !BEARER) {
 
 const BASE = "https://api.themoviedb.org/3";
 
-function buildUrl(path: string, params?: Record<string, string | number>) {
+// Build URL for TMDB request
+function buildUrl(
+  path: string,
+  params?: Record<string, string | number>
+): string {
   const url = new URL(`${BASE}${path}`);
   if (!BEARER) {
-    // only add api_key when bearer token is NOT used
     if (!API_KEY) throw new Error("TMDB_API_KEY missing in environment.");
     url.searchParams.set("api_key", API_KEY);
   }
@@ -28,10 +31,10 @@ function buildUrl(path: string, params?: Record<string, string | number>) {
   return url.toString();
 }
 
-function buildHeaders() {
+// Build authorization headers
+function buildHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   if (BEARER) {
-    // ensure correct form
     const token = BEARER.trim();
     const prefix = token.toLowerCase().startsWith("bearer ") ? "" : "Bearer ";
     headers["Authorization"] = `${prefix}${token}`;
@@ -39,13 +42,27 @@ function buildHeaders() {
   return headers;
 }
 
+// Convert unknown error to safe string
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return "Unknown error";
+  }
+}
+
+/**
+ * Retry wrapper for TMDB API requests.
+ */
 async function fetchWithRetry<T>(
   url: string,
   retries = 3,
   timeoutMs = 8000
 ): Promise<T> {
   let attempt = 0;
-  const backoff = (n: number) => 250 * Math.pow(2, n); // 250 → 500 → 1000
+  const backoff = (n: number) => 250 * Math.pow(2, n); // exponential delay: 250 → 500 → 1000
 
   while (attempt < retries) {
     attempt++;
@@ -59,6 +76,7 @@ async function fetchWithRetry<T>(
         headers,
         next: { revalidate: 60 },
       });
+
       clearTimeout(id);
 
       if (!res.ok) {
@@ -67,36 +85,31 @@ async function fetchWithRetry<T>(
       }
 
       return (await res.json()) as T;
-    } catch (err: any) {
+    } catch (err: unknown) {
       clearTimeout(id);
 
       const delay = backoff(attempt - 1);
+      const message = getErrorMessage(err);
 
       console.warn(
-        `tmdb fetch failed (attempt ${attempt}) for ${url}: ${String(
-          err
-        )}. retrying after ${delay}ms`
+        `TMDB fetch failed (attempt ${attempt}) for ${url}: ${message}. Retrying in ${delay}ms`
       );
 
       if (attempt >= retries) {
-        const e = new Error(
-          `Failed to fetch ${url} after ${attempt} attempts. Last error: ${
-            err?.message || err
-          }`
+        throw new Error(
+          `Failed to fetch ${url} after ${attempt} attempts. Last error: ${message}`
         );
-        (e as any).cause = err;
-        throw e;
       }
 
-      await new Promise((r) => setTimeout(r, delay));
-      continue;
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
   throw new Error("Unexpected fetchWithRetry flow");
 }
 
-// Public helpers
+// ---- Public API helpers ----
+
 export async function fetchPopularMovies(): Promise<TMDBListResponse> {
   const url = buildUrl("/movie/popular", { page: 1 });
   return fetchWithRetry<TMDBListResponse>(url);
@@ -115,9 +128,4 @@ export async function fetchNowPlaying(): Promise<TMDBListResponse> {
 export async function fetchMovieById(id: string): Promise<Movie> {
   const url = buildUrl(`/movie/${id}`);
   return fetchWithRetry<Movie>(url);
-}
-
-export function getPosterUrl(path: string | null | undefined, size = "w500") {
-  if (!path) return "/placeholder_poster.png";
-  return `https://image.tmdb.org/t/p/${size}${path}`;
 }

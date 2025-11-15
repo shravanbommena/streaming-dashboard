@@ -26,7 +26,7 @@ export default function MovieRow({ movies, categoryTitle }: Props) {
               <div className="relative w-[150px] h-[225px]">
                 <Image
                   src={getPosterUrl(m.poster_path, "w342")}
-                  alt={m.title || m.name || "poster"}
+                  alt={m.title ?? m.name ?? "Movie poster"}
                   fill
                   sizes="(max-width: 640px) 150px, 200px"
                   style={{ objectFit: "cover" }}

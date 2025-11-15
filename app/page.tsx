@@ -50,8 +50,9 @@ export default async function HomePage() {
         <div className="max-w-3xl mx-auto p-8 text-center">
           <h2 className="text-2xl font-bold">Content currently unavailable</h2>
           <p className="mt-2 text-neutral-300">
-            We're having trouble fetching movie data right now. Check your
-            network or API credentials. Errors are logged on the server console.
+            {
+              "We're having trouble fetching movie data right now. Check your network or API credentials. Errors are logged on the server console."
+            }
           </p>
         </div>
       ) : (
@@ -63,11 +64,12 @@ export default async function HomePage() {
                   hero.backdrop_path ?? hero.poster_path,
                   "w1280"
                 )}
-                alt={hero.title || hero.name}
+                alt={hero.title ?? hero.name ?? "Movie banner"}
                 fill
                 priority
                 style={{ objectFit: "cover" }}
               />
+
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
               <div className="absolute bottom-8 left-8 max-w-xl">
                 <h1 className="text-4xl font-extrabold">
